@@ -73,19 +73,14 @@ class Harvester:
                 self.mtimes[f] = self.getmtime(f)
 
     def save(self):
-        print('saving')
         files_to_save = []
         for f in self.files:
             if os.path.isfile(f):
                 current = self.getmtime(f)
-                if self.mtimes[f] != current or current == 0:
+                if self.mtimes.get(f, 0) != current or current == 0:
                     self.mtimes[f] = current
                     files_to_save.append(f)
-                    print('save {}'.format(f))
-                else:
-                    print('ignoring {}'.format(f))
         self.con.save(files_to_save)
-        print('finished')
 
     def getmtime(self, filename):
         try:
