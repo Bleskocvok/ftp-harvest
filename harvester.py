@@ -2,6 +2,7 @@
 import ftplib
 import time
 import os
+import ast
 from pathlib import Path
 
 
@@ -12,24 +13,21 @@ class FTPConnection:
         self.username = username
         self.password = password
 
-
-class Harvester:
-    def __init__(self, connection, files, interval=5):
-        self.con = connection
-        self.files = files
-        self.interval = interval
-
-    def load(self):
-        with ftplib.FTP(self.con.server, self.con.username, self.con.password) as ftp:
-            for fname in self.files:
+    def load(self, files):
+        if not files:
+            return
+        with ftplib.FTP(self.server, self.username, self.password) as ftp:
+            for fname in files:
                 dirname = os.path.dirname(fname)
                 ls = ftp.nlst(dirname)
                 Path(dirname).mkdir(parents=True, exist_ok=True)
                 self._load_file(fname, ftp, ls)
 
-    def save(self):
-        with ftplib.FTP(self.con.server, self.con.username, self.con.password) as ftp:
-            for fname in self.files:
+    def save(self, files):
+        if not files:
+            return
+        with ftplib.FTP(self.server, self.username, self.password) as ftp:
+            for fname in files:
                 self._save_file(fname, ftp)
 
     def _load_file(self, filename, ftp, ls):
@@ -60,3 +58,46 @@ class Harvester:
             last = head
         dirs.sort()  # sorts by length, so that it creates the dirs in the correct order
         return dirs
+
+
+class Harvester:
+    def __init__(self, connection, files):
+        self.con = connection
+        self.files = files
+        self.mtimes = {}
+
+    def load(self):
+        self.con.load(self.files)
+        for f in self.files:
+            if os.path.isfile(f):
+                self.mtimes[f] = self.getmtime(f)
+
+    def save(self):
+        print('saving')
+        files_to_save = []
+        for f in self.files:
+            if os.path.isfile(f):
+                current = self.getmtime(f)
+                if self.mtimes[f] != current or current == 0:
+                    self.mtimes[f] = current
+                    files_to_save.append(f)
+                    print('save {}'.format(f))
+                else:
+                    print('ignoring {}'.format(f))
+        self.con.save(files_to_save)
+        print('finished')
+
+    def getmtime(self, filename):
+        try:
+            return os.path.getmtime(filename)
+        except Exception as e:
+            print("WARNING: " + str(e))
+        return 0
+
+    def save_cache(self, cache_file):
+        with open(cache_file, 'w') as f:
+            f.write(str(self.mtimes))
+
+    def load_cache(self, cache_file):
+        with open(cache_file, 'r') as f:
+            self.mtimes = ast.literal_eval(f.read())
